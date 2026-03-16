@@ -1,3 +1,5 @@
+import Object_DTC_DATABASE from './dtcDatabase';
+
 export function parseDTCResponse(hexString: string): string[] {
   const cleanHex = hexString.replace(/\s/g, '').toUpperCase();
   if (cleanHex.includes('NODATA') || cleanHex.includes('ERROR')) {

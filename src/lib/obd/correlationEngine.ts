@@ -24,32 +24,38 @@ export function analyzeDTCsAndData(dtcs: string[], liveData: Record<string, numb
   let riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' = 'LOW';
 
   // 2. Correlation Logic (Root Cause vs Symptom)
-  // Rule A: Network or Computer codes are always primary if present
   if (categories.network.length > 0 || categories.computer.length > 0) {
+    // Rule A: Network or Computer codes are always primary if present
     primarySuspects.push(...categories.network, ...categories.computer);
-    symptomCodes.push(...dtcs.filter(c => !primarySuspects.includes(c)));
     riskLevel = 'CRITICAL';
-  } 
-  // Rule B: Sensor codes usually cause Misfire and Emission codes
-  else if (categories.sensors.length > 0) {
+  } else if (categories.sensors.length > 0) {
+    // Rule B: Sensor codes usually cause Misfire and Emission codes
     primarySuspects.push(...categories.sensors);
-    symptomCodes.push(...categories.ignition, ...categories.emissions, ...categories.fuel);
     riskLevel = 'HIGH';
-  } 
-  // Rule C: Fuel codes can cause Misfire and Emissions
-  else if (categories.fuel.length > 0) {
+  } else if (categories.fuel.length > 0) {
+    // Rule C: Fuel codes can cause Misfire and Emissions
     primarySuspects.push(...categories.fuel);
-    symptomCodes.push(...categories.ignition, ...categories.emissions);
     riskLevel = 'HIGH';
-  }
-  // Rule D: Ignition/Misfire codes can cause Emission codes (Catalyst damage)
-  else if (categories.ignition.length > 0) {
+  } else if (categories.ignition.length > 0) {
+    // Rule D: Ignition/Misfire codes can cause Emission codes (Catalyst damage)
     primarySuspects.push(...categories.ignition);
-    symptomCodes.push(...categories.emissions);
     riskLevel = 'MEDIUM';
   } else {
+    // If no clear hierarchy, all are primary
     primarySuspects.push(...dtcs);
   }
+
+  // Assign remaining DTCs correctly
+  dtcs.forEach(code => {
+    if (!primarySuspects.includes(code)) {
+      // Transmission and Speed codes are usually independent of engine sensors
+      if (code.startsWith('P07') || code.startsWith('P08') || code.startsWith('P05')) {
+        primarySuspects.push(code);
+      } else {
+        symptomCodes.push(code);
+      }
+    }
+  });
 
   // 3. Live Data Correlation (Finding anomalies that explain the codes)
   if (liveData.SHRTFT1 !== undefined) {
@@ -57,13 +63,31 @@ export function analyzeDTCsAndData(dtcs: string[], liveData: Record<string, numb
     if (liveData.SHRTFT1 < -15) dataAnomalies.push("تعديل وقود سلبي عالي (خليط غني - احتمال تسييل بخاخات أو انسداد هواء)");
   }
   
+  if (liveData.EQUIV_RATIO !== undefined) {
+    if (liveData.EQUIV_RATIO > 1.05) {
+      dataAnomalies.push("نسبة الوقود للهواء (Lambda) تشير إلى خليط فقير (Lean) - احتمال تسريب هواء أو ضعف وقود");
+    } else if (liveData.EQUIV_RATIO < 0.95) {
+      dataAnomalies.push("نسبة الوقود للهواء (Lambda) تشير إلى خليط غني (Rich) - احتمال تسييل بخاخات أو انسداد هواء");
+    }
+  }
+
   if (liveData.TEMP !== undefined) {
-    if (liveData.TEMP > 110) { // Increased threshold to 110C for modern engines
+    if (liveData.TEMP > 105) { // Adjusted threshold to 105C
       dataAnomalies.push("حرارة المحرك مرتفعة جداً (خطر تلف المحرك)");
       riskLevel = 'CRITICAL';
     }
     if (liveData.TEMP < 60 && liveData.RUNTIME && liveData.RUNTIME > 300) {
       dataAnomalies.push("حرارة المحرك منخفضة بعد فترة تشغيل (احتمال تلف بلف الحرارة Thermostat)");
+    }
+  }
+
+  if (liveData.CAT_TEMP !== undefined) {
+    if ((dtcs.includes('P0420') || dtcs.includes('P0430')) && liveData.CAT_TEMP < 400 && liveData.RUNTIME && liveData.RUNTIME > 600) {
+      dataAnomalies.push("حرارة دبة التلوث منخفضة رغم وجود كود ضعف الكفاءة (احتمال تلف الدبة أو تفريغها)");
+    }
+    if (liveData.CAT_TEMP > 900) {
+      dataAnomalies.push("حرارة دبة التلوث مرتفعة جداً (خطر انصهار الدبة بسبب Misfire أو خليط غني)");
+      riskLevel = 'CRITICAL';
     }
   }
 

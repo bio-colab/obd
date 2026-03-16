@@ -110,7 +110,7 @@ async function startServer() {
   // --- AI Diagnostics Endpoint ---
   app.post("/api/ai/diagnose", async (req, res) => {
     try {
-      const { dtcs, liveData, engineAnalysis } = req.body;
+      const { dtcs, liveData, engineAnalysis, uiLang = 'ar', termLang = 'en' } = req.body;
       
       if (!dtcs || !Array.isArray(dtcs)) {
         return res.status(400).json({ error: "Invalid DTCs payload" });
@@ -122,8 +122,12 @@ async function startServer() {
       
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-      const prompt = `
+      const isUiArabic = uiLang === 'ar';
+      const isTermEnglish = termLang === 'en';
+
+      const prompt = isUiArabic ? `
       قم بتحليل أعطال السيارة التالية والبيانات الحية لتحديد السبب الجذري (Root Cause) والأعراض الجانبية (Symptoms).
+      ${isTermEnglish ? 'ملاحظة هامة: استخدم اللغة الإنجليزية حصراً لجميع المصطلحات الفنية، أسماء الحساسات، وأجزاء السيارة.' : ''}
       
       الأعطال المسجلة (DTCs):
       ${dtcs.join(', ')}
@@ -133,24 +137,50 @@ async function startServer() {
       
       تحليل المحرك المبدئي (Correlation Engine Analysis):
       ${JSON.stringify(engineAnalysis, null, 2)}
+      ` : `
+      Analyze the following car DTCs and live data to determine the Root Cause and Symptoms.
+      
+      Recorded DTCs:
+      ${dtcs.join(', ')}
+      
+      Live Sensor Data:
+      ${JSON.stringify(liveData, null, 2)}
+      
+      Initial Correlation Engine Analysis:
+      ${JSON.stringify(engineAnalysis, null, 2)}
       `;
+
+      const systemInstruction = isUiArabic 
+        ? `أنت خبير ميكانيكي سيارات معتمد (ASE Master Mechanic). مهمتك هي تحليل رموز أعطال OBD2 والبيانات الحية. يجب عليك التمييز بين الأسباب الجذرية (مثل: تلف حساس MAF، تسريب هواء) والأعراض الجانبية (مثل: ضعف الاحتراق، ضعف دبة التلوث). يجب أن يكون الرد بصيغة JSON مهيكلة باللغة العربية. ${isTermEnglish ? 'يجب استخدام المصطلحات الإنجليزية لأجزاء السيارة والحساسات.' : ''}`
+        : "You are an ASE Master Mechanic. Your task is to analyze OBD2 DTCs and live data. Distinguish between root causes (e.g., faulty MAF, vacuum leak) and symptoms (e.g., misfire, catalyst inefficiency). Respond in structured JSON in English.";
+
+      const responseSchema = isUiArabic ? {
+        type: Type.OBJECT,
+        properties: {
+          rootCauses: { type: Type.ARRAY, items: { type: Type.STRING }, description: "الأسباب الجذرية المحتملة التي أدت لظهور باقي الأعطال." },
+          symptoms: { type: Type.ARRAY, items: { type: Type.STRING }, description: "الأعطال التي تعتبر مجرد أعراض جانبية للسبب الجذري." },
+          explanation: { type: Type.STRING, description: "شرح مفصل لكيفية ارتباط الأعطال ببعضها وكيف أدى السبب الجذري لظهور الأعراض." },
+          recommendedActions: { type: Type.ARRAY, items: { type: Type.STRING }, description: "خطوات الفحص والإصلاح الموصى بها بالترتيب." }
+        },
+        required: ["rootCauses", "symptoms", "explanation", "recommendedActions"]
+      } : {
+        type: Type.OBJECT,
+        properties: {
+          rootCauses: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Potential root causes that triggered the other faults." },
+          symptoms: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Faults that are merely symptoms of the root cause." },
+          explanation: { type: Type.STRING, description: "Detailed explanation of how the faults correlate and how the root cause led to the symptoms." },
+          recommendedActions: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Recommended inspection and repair steps in order." }
+        },
+        required: ["rootCauses", "symptoms", "explanation", "recommendedActions"]
+      };
 
       const response = await ai.models.generateContent({
         model: "gemini-3.1-pro-preview",
         contents: prompt,
         config: {
-          systemInstruction: "أنت خبير ميكانيكي سيارات معتمد (ASE Master Mechanic). مهمتك هي تحليل رموز أعطال OBD2 والبيانات الحية. يجب عليك التمييز بين الأسباب الجذرية (مثل: تلف حساس MAF، تسريب هواء) والأعراض الجانبية (مثل: ضعف الاحتراق، ضعف دبة التلوث). يجب أن يكون الرد بصيغة JSON مهيكلة باللغة العربية.",
+          systemInstruction,
           responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              rootCauses: { type: Type.ARRAY, items: { type: Type.STRING }, description: "الأسباب الجذرية المحتملة التي أدت لظهور باقي الأعطال." },
-              symptoms: { type: Type.ARRAY, items: { type: Type.STRING }, description: "الأعطال التي تعتبر مجرد أعراض جانبية للسبب الجذري." },
-              explanation: { type: Type.STRING, description: "شرح مفصل لكيفية ارتباط الأعطال ببعضها وكيف أدى السبب الجذري لظهور الأعراض." },
-              recommendedActions: { type: Type.ARRAY, items: { type: Type.STRING }, description: "خطوات الفحص والإصلاح الموصى بها بالترتيب." }
-            },
-            required: ["rootCauses", "symptoms", "explanation", "recommendedActions"]
-          }
+          responseSchema
         }
       });
 

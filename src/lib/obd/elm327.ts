@@ -14,7 +14,18 @@ export class ELM327 {
     
     // AT Commands sequence
     await this.send('ATZ'); // Reset
-    await new Promise(r => setTimeout(r, 1000)); // Wait for reset
+    // Some ELM327 devices take time to reset and send the prompt
+    await new Promise(r => setTimeout(r, 1000)); 
+    
+    // Clear any residual data in the buffer after reset
+    try {
+      // Send a dummy command to get a prompt or just read if there's anything left
+      await this.connection.send('\r');
+      await this.connection.read();
+    } catch (e) {
+      // Ignore timeout if buffer was already empty
+    }
+
     await this.send('ATE0'); // Echo off
     await this.send('ATL0'); // Linefeed off
     await this.send('ATS0'); // Spaces off

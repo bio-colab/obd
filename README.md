@@ -1,20 +1,27 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# OBD-II Smart Diagnostics
 
-# Run and deploy your AI Studio app
+A modern, web-based OBD-II diagnostic tool built with React, TypeScript, and Vite. It connects to ELM327 adapters via USB, Bluetooth (BLE), or WiFi to read real-time vehicle data, diagnose fault codes (DTCs), and provide AI-powered repair recommendations.
 
-This contains everything you need to run your app locally.
+## Features
+- **Multi-Protocol Connection:** Supports USB (Serial), Bluetooth Low Energy (BLE), and WiFi ELM327 adapters.
+- **Real-time Dashboard:** Live monitoring of RPM, Speed, Engine Load, Coolant Temp, and more.
+- **Smart Diagnostics:** Reads and clears DTCs, with a built-in database for generic and manufacturer-specific codes.
+- **AI Analysis:** Uses Gemini AI to analyze fault codes and live data to suggest root causes and repair steps.
+- **Driver Behavior Scoring:** Analyzes acceleration and braking patterns to score driving habits.
+- **Offline Support:** Uses Dexie.js to store session data locally and queues IoT payloads when offline.
 
-View your app in AI Studio: https://ai.studio/apps/94098ad0-dc42-4d47-95ec-76d22425873f
+## Architecture
+- **Connection Layer:** Abstract `ConnectionManager` with concrete implementations (`usb.ts`, `ble.ts`, `wifi.ts`, `demo.ts`).
+- **Protocol Layer:** `ELM327` class handles AT commands, PID parsing, and hex decoding.
+- **State Management:** Zustand store divided into logical slices (`connectionSlice`, `pollingSlice`, `diagnosticSlice`, `settingsSlice`).
+- **Local Database:** Dexie.js (IndexedDB) for storing readings, events, and sessions.
+- **Backend:** Express server (`server.ts`) acts as an IoT endpoint and AI proxy.
 
-## Run Locally
+## Setup
+1. Install dependencies: `npm install`
+2. Copy `.env.example` to `.env` and add your `GEMINI_API_KEY`.
+3. Start the development server: `npm run dev`
 
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Testing
+Run tests using Vitest:
+`npm run test`

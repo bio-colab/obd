@@ -14,6 +14,8 @@ import {
   Legend,
   Filler
 } from 'chart.js';
+import { useI18n } from '../lib/i18n';
+import { DemoWarning } from './DemoWarning';
 
 ChartJS.register(
   CategoryScale,
@@ -28,6 +30,7 @@ ChartJS.register(
 
 export function Dashboard() {
   const { liveData, sessionId } = useCarStore();
+  const { t, uiLang, termLang } = useI18n();
   const [history, setHistory] = useState<{ speed: number[], rpm: number[], labels: string[] }>({ speed: [], rpm: [], labels: [] });
 
   const speed = liveData.SPEED || 0;
@@ -50,21 +53,20 @@ export function Dashboard() {
       setHistory({
         speed: reversed.map(r => r.speed),
         rpm: reversed.map(r => r.rpm / 100),
-        labels: reversed.map(r => new Date(r.timestamp).toLocaleTimeString('ar-SA', { minute: '2-digit', second: '2-digit' }))
+        labels: reversed.map(r => new Date(r.timestamp).toLocaleTimeString(uiLang === 'ar' ? 'ar-SA' : 'en-US', { minute: '2-digit', second: '2-digit' }))
       });
     };
 
     fetchHistory();
-    // Set up an interval to fetch history periodically to keep chart updated
     const interval = setInterval(fetchHistory, 1500);
     return () => clearInterval(interval);
-  }, [sessionId, speed, rpm]); // Re-fetch when speed/rpm changes
+  }, [sessionId, speed, rpm, uiLang]);
 
   const chartData = {
     labels: history.labels.length > 0 ? history.labels : Array.from({ length: 20 }, (_, i) => i.toString()),
     datasets: [
       {
-        label: 'السرعة (km/h)',
+        label: t('speed') + ' (km/h)',
         data: history.speed.length > 0 ? history.speed : Array.from({ length: 20 }, () => 0),
         borderColor: 'rgb(99, 102, 241)',
         backgroundColor: 'rgba(99, 102, 241, 0.1)',
@@ -72,7 +74,7 @@ export function Dashboard() {
         tension: 0.4,
       },
       {
-        label: 'دورة المحرك (RPM / 100)',
+        label: PIDS.RPM.name[termLang] + ' (/ 100)',
         data: history.rpm.length > 0 ? history.rpm : Array.from({ length: 20 }, () => 0),
         borderColor: 'rgb(244, 63, 94)',
         backgroundColor: 'rgba(244, 63, 94, 0.1)',
@@ -93,34 +95,35 @@ export function Dashboard() {
       legend: { labels: { color: '#94a3b8' } }
     },
     animation: {
-      duration: 0 // Disable animation for smoother live updates
+      duration: 0
     }
   };
 
   return (
     <div className="space-y-6">
+      <DemoWarning />
       <header>
-        <h2 className="text-3xl font-bold text-slate-100">لوحة القيادة المباشرة</h2>
-        <p className="text-slate-400 mt-2">مراقبة حية لبيانات المحرك والحساسات (Live Data Stream)</p>
+        <h2 className="text-3xl font-bold text-slate-100">{t('dashboard')}</h2>
+        <p className="text-slate-400 mt-2">{uiLang === 'ar' ? 'مراقبة حية لبيانات المحرك والحساسات (Live Data Stream)' : 'Live monitoring of engine data and sensors (Live Data Stream)'}</p>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard title="السرعة" value={speed} unit="km/h" color="text-indigo-400" />
-        <StatCard title="دورة المحرك" value={rpm} unit="RPM" color="text-rose-400" />
-        <StatCard title="حرارة المحرك" value={temp} unit="°C" color={temp > 100 ? 'text-red-500' : 'text-amber-400'} />
-        <StatCard title="جهد البطارية" value={voltage.toFixed(1)} unit="V" color={voltage < 12 ? 'text-red-500' : 'text-emerald-400'} />
+        <StatCard title={PIDS.SPEED.name[termLang]} value={speed} unit="km/h" color="text-indigo-400" />
+        <StatCard title={PIDS.RPM.name[termLang]} value={rpm} unit="RPM" color="text-rose-400" />
+        <StatCard title={PIDS.TEMP.name[termLang]} value={temp} unit="°C" color={temp > 100 ? 'text-red-500' : 'text-amber-400'} />
+        <StatCard title={PIDS.BATTERY.name[termLang]} value={voltage.toFixed(1)} unit="V" color={voltage < 12 ? 'text-red-500' : 'text-emerald-400'} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-6 h-96">
-          <h3 className="text-lg font-medium text-slate-200 mb-4">الأداء المباشر</h3>
+          <h3 className="text-lg font-medium text-slate-200 mb-4">{t('live_chart')}</h3>
           <div className="h-72">
             <Line data={chartData} options={chartOptions as any} />
           </div>
         </div>
 
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col h-96">
-          <h3 className="text-lg font-medium text-slate-200 mb-4">قائمة البيانات الحية (Data List)</h3>
+          <h3 className="text-lg font-medium text-slate-200 mb-4">{t('live_sensors')}</h3>
           <div className="space-y-2 overflow-y-auto flex-1 pr-2 custom-scrollbar">
             {Object.keys(PIDS).map(key => {
               const pid = PIDS[key];
@@ -128,7 +131,7 @@ export function Dashboard() {
               return (
                 <SensorRow 
                   key={key}
-                  label={pid.name} 
+                  label={pid.name[termLang]} 
                   value={val !== undefined ? `${typeof val === 'number' ? val.toFixed(1) : val} ${pid.unit}` : '--'} 
                 />
               );

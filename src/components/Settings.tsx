@@ -5,10 +5,12 @@ import { BLEConnection } from '../lib/obd/bluetooth';
 import { WiFiConnection } from '../lib/obd/wifi';
 import { DemoConnection } from '../lib/obd/demo';
 import { ELM327 } from '../lib/obd/elm327';
-import { Usb, Bluetooth, Wifi, LogOut, Loader2, PlayCircle, Bell } from 'lucide-react';
+import { Usb, Bluetooth, Wifi, LogOut, Loader2, PlayCircle, Bell, Globe } from 'lucide-react';
+import { useI18n } from '../lib/i18n';
 
 export function Settings() {
   const { isConnected, connectionType, connect, disconnect, smartAlertsEnabled, toggleSmartAlerts } = useCarStore();
+  const { t, uiLang, termLang, setUiLang, setTermLang } = useI18n();
   const [loading, setLoading] = useState<'usb' | 'ble' | 'wifi' | 'demo' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [wifiIp, setWifiIp] = useState('192.168.0.10:35000');
@@ -147,20 +149,70 @@ export function Settings() {
         </div>
       )}
 
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mt-8 space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+              <Globe className="w-5 h-5 text-indigo-400" />
+              {t('app_language')}
+            </h3>
+            <p className="text-slate-400 mt-1">{uiLang === 'ar' ? 'اختر لغة واجهة التطبيق' : 'Choose application interface language'}</p>
+          </div>
+          <div className="flex bg-slate-950 p-1 rounded-lg border border-slate-800">
+            <button 
+              onClick={() => setUiLang('ar')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${uiLang === 'ar' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              {t('arabic')}
+            </button>
+            <button 
+              onClick={() => setUiLang('en')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${uiLang === 'en' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              {t('english')}
+            </button>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between pt-6 border-t border-slate-800">
+          <div>
+            <h3 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+              <Globe className="w-5 h-5 text-teal-400" />
+              {t('term_language')}
+            </h3>
+            <p className="text-slate-400 mt-1">{uiLang === 'ar' ? 'اختر لغة المصطلحات الفنية (الأعطال، الحساسات)' : 'Choose technical terminology language (DTCs, Sensors)'}</p>
+          </div>
+          <div className="flex bg-slate-950 p-1 rounded-lg border border-slate-800">
+            <button 
+              onClick={() => setTermLang('ar')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${termLang === 'ar' ? 'bg-teal-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              {t('arabic')}
+            </button>
+            <button 
+              onClick={() => setTermLang('en')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${termLang === 'en' ? 'bg-teal-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              {t('english')}
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mt-8">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-xl font-bold text-slate-100 flex items-center gap-2">
               <Bell className="w-5 h-5 text-amber-400" />
-              التنبيهات الذكية
+              {t('smart_alerts')}
             </h3>
-            <p className="text-slate-400 mt-1">تلقي إشعارات عند ارتفاع حرارة المحرك أو انخفاض جهد البطارية</p>
+            <p className="text-slate-400 mt-1">{t('smart_alerts_desc')}</p>
           </div>
           <button
             onClick={toggleSmartAlerts}
             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${smartAlertsEnabled ? 'bg-amber-500' : 'bg-slate-700'}`}
           >
-            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${smartAlertsEnabled ? '-translate-x-6' : '-translate-x-1'}`} />
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${smartAlertsEnabled ? (uiLang === 'ar' ? '-translate-x-6' : 'translate-x-6') : (uiLang === 'ar' ? '-translate-x-1' : 'translate-x-1')}`} />
           </button>
         </div>
       </div>

@@ -3,9 +3,11 @@ import { useCarStore } from '../store/carStore';
 import { DTC_DATABASE } from '../lib/obd/dtcDatabase';
 import { AlertTriangle, CheckCircle, Trash2, RefreshCw, Car, ShieldCheck, BrainCircuit, Loader2, Info } from 'lucide-react';
 import { motion } from 'motion/react';
+import { useI18n } from '../lib/i18n';
 
 export function Diagnostics() {
   const { dtcs, readDTCs, clearDTCs, isConnected, vin, readiness, analyzeFaults, aiDiagnosis, isAnalyzing } = useCarStore();
+  const { t, uiLang, termLang } = useI18n();
   const [loading, setLoading] = useState(false);
 
   const handleRead = async () => {
@@ -15,7 +17,7 @@ export function Diagnostics() {
   };
 
   const handleClear = async () => {
-    if (window.confirm('هل أنت متأكد من مسح جميع الأعطال؟')) {
+    if (window.confirm(uiLang === 'ar' ? 'هل أنت متأكد من مسح جميع الأعطال؟' : 'Are you sure you want to clear all DTCs?')) {
       setLoading(true);
       await clearDTCs();
       setLoading(false);
@@ -26,8 +28,8 @@ export function Diagnostics() {
     <div className="space-y-6">
       <header className="flex justify-between items-end">
         <div>
-          <h2 className="text-3xl font-bold text-slate-100">تشخيص الأعطال (DTC)</h2>
-          <p className="text-slate-400 mt-2">قراءة وتفسير رموز أعطال المحرك</p>
+          <h2 className="text-3xl font-bold text-slate-100">{t('diagnostics')}</h2>
+          <p className="text-slate-400 mt-2">{uiLang === 'ar' ? 'قراءة وتفسير رموز أعطال المحرك' : 'Read and interpret engine fault codes'}</p>
         </div>
         <div className="flex gap-3">
           <button
@@ -36,7 +38,7 @@ export function Diagnostics() {
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl font-medium transition-colors"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            فحص الأعطال
+            {uiLang === 'ar' ? 'فحص الأعطال' : 'Scan DTCs'}
           </button>
           <button
             onClick={handleClear}
@@ -44,7 +46,7 @@ export function Diagnostics() {
             className="flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white rounded-xl font-medium transition-colors"
           >
             <Trash2 className="w-4 h-4" />
-            مسح الأعطال
+            {uiLang === 'ar' ? 'مسح الأعطال' : 'Clear DTCs'}
           </button>
         </div>
       </header>
@@ -54,17 +56,17 @@ export function Diagnostics() {
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-4">
             <Car className="w-6 h-6 text-indigo-400" />
-            <h3 className="text-xl font-bold text-slate-200">معلومات المركبة</h3>
+            <h3 className="text-xl font-bold text-slate-200">{uiLang === 'ar' ? 'معلومات المركبة' : 'Vehicle Information'}</h3>
           </div>
           <div className="space-y-3">
             <div className="flex justify-between items-center py-2 border-b border-slate-800/50">
-              <span className="text-slate-400 text-sm">رقم الهيكل (VIN)</span>
-              <span className="text-slate-200 font-mono font-medium">{vin || 'غير متوفر'}</span>
+              <span className="text-slate-400 text-sm">{uiLang === 'ar' ? 'رقم الهيكل (VIN)' : 'VIN'}</span>
+              <span className="text-slate-200 font-mono font-medium">{vin || (uiLang === 'ar' ? 'غير متوفر' : 'N/A')}</span>
             </div>
             <div className="flex justify-between items-center py-2 border-b border-slate-800/50">
-              <span className="text-slate-400 text-sm">حالة الاتصال</span>
+              <span className="text-slate-400 text-sm">{t('connection_status')}</span>
               <span className={`font-medium ${isConnected ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {isConnected ? 'متصل' : 'غير متصل'}
+                {isConnected ? t('connected') : t('disconnected')}
               </span>
             </div>
           </div>
@@ -73,20 +75,20 @@ export function Diagnostics() {
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-4">
             <ShieldCheck className="w-6 h-6 text-emerald-400" />
-            <h3 className="text-xl font-bold text-slate-200">جاهزية الانبعاثات (I/M Readiness)</h3>
+            <h3 className="text-xl font-bold text-slate-200">{uiLang === 'ar' ? 'جاهزية الانبعاثات (I/M Readiness)' : 'I/M Readiness'}</h3>
           </div>
           {!readiness ? (
-            <p className="text-slate-500 text-center py-4">البيانات غير متوفرة</p>
+            <p className="text-slate-500 text-center py-4">{uiLang === 'ar' ? 'البيانات غير متوفرة' : 'Data not available'}</p>
           ) : (
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-              <ReadinessItem label="Misfire" ready={readiness.misfire} />
-              <ReadinessItem label="Fuel System" ready={readiness.fuelSystem} />
-              <ReadinessItem label="Components" ready={readiness.components} />
-              <ReadinessItem label="Catalyst" ready={readiness.catalyst} />
-              <ReadinessItem label="Evap System" ready={readiness.evap} />
-              <ReadinessItem label="O2 Sensor" ready={readiness.o2Sensor} />
-              <ReadinessItem label="O2 Heater" ready={readiness.o2Heater} />
-              <ReadinessItem label="EGR System" ready={readiness.egr} />
+              <ReadinessItem label="Misfire" ready={readiness.misfire} uiLang={uiLang} />
+              <ReadinessItem label="Fuel System" ready={readiness.fuelSystem} uiLang={uiLang} />
+              <ReadinessItem label="Components" ready={readiness.components} uiLang={uiLang} />
+              <ReadinessItem label="Catalyst" ready={readiness.catalyst} uiLang={uiLang} />
+              <ReadinessItem label="Evap System" ready={readiness.evap} uiLang={uiLang} />
+              <ReadinessItem label="O2 Sensor" ready={readiness.o2Sensor} uiLang={uiLang} />
+              <ReadinessItem label="O2 Heater" ready={readiness.o2Heater} uiLang={uiLang} />
+              <ReadinessItem label="EGR System" ready={readiness.egr} uiLang={uiLang} />
             </div>
           )}
         </div>
@@ -94,18 +96,18 @@ export function Diagnostics() {
 
       {/* DTC List */}
       <div className="mt-8">
-        <h3 className="text-xl font-bold text-slate-200 mb-4">رموز الأعطال المسجلة</h3>
+        <h3 className="text-xl font-bold text-slate-200 mb-4">{uiLang === 'ar' ? 'رموز الأعطال المسجلة' : 'Stored Fault Codes'}</h3>
         {!isConnected ? (
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center">
             <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto mb-4" />
-            <h3 className="text-xl font-medium text-slate-200">السيارة غير متصلة</h3>
-            <p className="text-slate-400 mt-2">الرجاء الاتصال بجهاز OBD أولاً لقراءة الأعطال.</p>
+            <h3 className="text-xl font-medium text-slate-200">{uiLang === 'ar' ? 'السيارة غير متصلة' : 'Vehicle Disconnected'}</h3>
+            <p className="text-slate-400 mt-2">{uiLang === 'ar' ? 'الرجاء الاتصال بجهاز OBD أولاً لقراءة الأعطال.' : 'Please connect to an OBD device first to read faults.'}</p>
           </div>
         ) : dtcs.length === 0 ? (
           <div className="bg-slate-900 border border-emerald-900/50 rounded-2xl p-12 text-center">
             <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto mb-4" />
-            <h3 className="text-xl font-medium text-slate-200">لا توجد أعطال</h3>
-            <p className="text-slate-400 mt-2">نظام المحرك يعمل بشكل سليم.</p>
+            <h3 className="text-xl font-medium text-slate-200">{uiLang === 'ar' ? 'لا توجد أعطال' : 'No Faults Found'}</h3>
+            <p className="text-slate-400 mt-2">{uiLang === 'ar' ? 'نظام المحرك يعمل بشكل سليم.' : 'Engine system is operating normally.'}</p>
           </div>
         ) : (
           <div className="grid gap-4">
@@ -119,21 +121,21 @@ export function Diagnostics() {
                   <div className="flex-1">
                     <h3 className="text-xl font-bold font-mono text-rose-400">{code}</h3>
                     <p className="text-slate-300 mt-1 text-lg">
-                      {dbEntry ? dbEntry.description : 'عطل غير معروف في قاعدة البيانات (Generic Code)'}
+                      {dbEntry ? dbEntry.description[termLang] : (uiLang === 'ar' ? 'عطل غير معروف في قاعدة البيانات (Generic Code)' : 'Unknown fault in database (Generic Code)')}
                     </p>
                     {dbEntry && dbEntry.causes && (
                       <div className="mt-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
-                        <span className="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-2 block">الأسباب المحتملة:</span>
+                        <span className="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-2 block">{uiLang === 'ar' ? 'الأسباب المحتملة:' : 'Possible Causes:'}</span>
                         <ul className="list-disc list-inside text-sm text-slate-300 space-y-1">
-                          {dbEntry.causes.map((cause, i) => (
+                          {dbEntry.causes[termLang].map((cause, i) => (
                             <li key={i}>{cause}</li>
                           ))}
                         </ul>
                       </div>
                     )}
                     <div className="mt-4 flex gap-2">
-                      <span className="px-2 py-1 bg-slate-800 text-slate-400 rounded text-xs font-medium">المحرك</span>
-                      <span className="px-2 py-1 bg-slate-800 text-slate-400 rounded text-xs font-medium">عطل حالي</span>
+                      <span className="px-2 py-1 bg-slate-800 text-slate-400 rounded text-xs font-medium">{uiLang === 'ar' ? 'المحرك' : 'Engine'}</span>
+                      <span className="px-2 py-1 bg-slate-800 text-slate-400 rounded text-xs font-medium">{uiLang === 'ar' ? 'عطل حالي' : 'Current Fault'}</span>
                     </div>
                   </div>
                 </div>
@@ -152,7 +154,7 @@ export function Diagnostics() {
                 ) : (
                   <BrainCircuit className="w-6 h-6" />
                 )}
-                التحليل الذكي للأعطال (AI Root Cause Analysis)
+                {uiLang === 'ar' ? 'التحليل الذكي للأعطال (AI Root Cause Analysis)' : 'AI Root Cause Analysis'}
               </button>
             </div>
           </div>
@@ -171,8 +173,8 @@ export function Diagnostics() {
               <BrainCircuit className="w-8 h-8 text-purple-400" />
             </div>
             <div>
-              <h3 className="text-2xl font-bold text-white">تقرير الذكاء الاصطناعي</h3>
-              <p className="text-purple-300/70 text-sm mt-1">تحليل متقدم للسبب الجذري للأعطال</p>
+              <h3 className="text-2xl font-bold text-white">{uiLang === 'ar' ? 'تقرير الذكاء الاصطناعي' : 'AI Report'}</h3>
+              <p className="text-purple-300/70 text-sm mt-1">{uiLang === 'ar' ? 'تحليل متقدم للسبب الجذري للأعطال' : 'Advanced root cause analysis'}</p>
             </div>
           </div>
 
@@ -182,7 +184,7 @@ export function Diagnostics() {
               <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-6">
                 <h4 className="text-rose-400 font-bold text-lg mb-4 flex items-center gap-2">
                   <AlertTriangle className="w-5 h-5" />
-                  الأسباب الجذرية (Root Causes)
+                  {uiLang === 'ar' ? 'الأسباب الجذرية (Root Causes)' : 'Root Causes'}
                 </h4>
                 <ul className="space-y-3">
                   {aiDiagnosis.rootCauses.map((cause, i) => (
@@ -198,7 +200,7 @@ export function Diagnostics() {
               <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-6">
                 <h4 className="text-amber-400 font-bold text-lg mb-4 flex items-center gap-2">
                   <Info className="w-5 h-5" />
-                  الأعراض الجانبية (Symptoms)
+                  {uiLang === 'ar' ? 'الأعراض الجانبية (Symptoms)' : 'Symptoms'}
                 </h4>
                 <ul className="space-y-3">
                   {aiDiagnosis.symptoms.map((sym, i) => (
@@ -213,7 +215,7 @@ export function Diagnostics() {
 
             {/* Explanation */}
             <div className="bg-slate-800/50 rounded-2xl p-6 border border-slate-700">
-              <h4 className="text-indigo-400 font-bold text-lg mb-3">التفسير الفني (Technical Explanation)</h4>
+              <h4 className="text-indigo-400 font-bold text-lg mb-3">{uiLang === 'ar' ? 'التفسير الفني (Technical Explanation)' : 'Technical Explanation'}</h4>
               <p className="text-slate-300 leading-relaxed text-lg">{aiDiagnosis.explanation}</p>
             </div>
 
@@ -221,7 +223,7 @@ export function Diagnostics() {
             <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-6">
               <h4 className="text-emerald-400 font-bold text-lg mb-4 flex items-center gap-2">
                 <CheckCircle className="w-5 h-5" />
-                خطوات الإصلاح المقترحة
+                {uiLang === 'ar' ? 'خطوات الإصلاح المقترحة' : 'Recommended Fixes'}
               </h4>
               <div className="space-y-4">
                 {aiDiagnosis.recommendedActions.map((action, i) => (
@@ -241,14 +243,14 @@ export function Diagnostics() {
   );
 }
 
-function ReadinessItem({ label, ready }: { label: string, ready: boolean }) {
+function ReadinessItem({ label, ready, uiLang }: { label: string, ready: boolean, uiLang: 'ar' | 'en' }) {
   return (
     <div className="flex justify-between items-center py-1.5 border-b border-slate-800/50 last:border-0">
       <span className="text-slate-400">{label}</span>
       {ready ? (
-        <span className="text-emerald-400 font-medium">Ready</span>
+        <span className="text-emerald-400 font-medium">{uiLang === 'ar' ? 'جاهز' : 'Ready'}</span>
       ) : (
-        <span className="text-rose-400 font-medium">Not Ready</span>
+        <span className="text-rose-400 font-medium">{uiLang === 'ar' ? 'غير جاهز' : 'Not Ready'}</span>
       )}
     </div>
   );

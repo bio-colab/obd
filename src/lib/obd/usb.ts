@@ -4,6 +4,7 @@ export class USBConnection extends ConnectionManager {
   private port: any = null;
   private reader: any = null;
   private writer: any = null;
+  private abortController: AbortController | null = null;
 
   constructor() {
     super('usb');
@@ -16,16 +17,36 @@ export class USBConnection extends ConnectionManager {
     
     // @ts-ignore
     this.port = await navigator.serial.requestPort();
-    await this.port.open({ baudRate: 38400 });
     
+    // Try common baud rates
+    const baudRates = [38400, 115200, 9600];
+    let opened = false;
+    
+    for (const baudRate of baudRates) {
+      try {
+        await this.port.open({ baudRate });
+        opened = true;
+        break; // Successfully opened
+      } catch (e) {
+        // If it's already open, or failed, try to close and reopen if possible
+        try { await this.port.close(); } catch (_) {}
+      }
+    }
+
+    if (!opened) {
+      throw new Error('فشل فتح المنفذ التسلسلي بأي سرعة نقل (Baud Rate)');
+    }
+    
+    this.abortController = new AbortController();
+
     // @ts-ignore
     const textDecoder = new TextDecoderStream();
-    this.port.readable.pipeTo(textDecoder.writable);
+    this.port.readable.pipeTo(textDecoder.writable, { signal: this.abortController.signal }).catch(() => {});
     this.reader = textDecoder.readable.getReader();
 
     // @ts-ignore
     const textEncoder = new TextEncoderStream();
-    textEncoder.readable.pipeTo(this.port.writable);
+    textEncoder.readable.pipeTo(this.port.writable, { signal: this.abortController.signal }).catch(() => {});
     this.writer = textEncoder.writable.getWriter();
 
     this._connected = true;
@@ -40,28 +61,37 @@ export class USBConnection extends ConnectionManager {
     if (!this.reader) throw new Error('غير متصل');
     let response = '';
     while (true) {
-      const { value, done } = await this.reader.read();
-      if (done) break;
-      response += value;
-      if (response.includes('>')) {
-        break;
+      try {
+        const { value, done } = await this.reader.read();
+        if (done) break;
+        response += value;
+        if (response.includes('>')) {
+          break;
+        }
+      } catch (e) {
+        break; // Stream closed or errored
       }
     }
     return response.replace('>', '').trim();
   }
 
   disconnect(): void {
+    this._connected = false;
+    
+    if (this.abortController) {
+      this.abortController.abort();
+    }
+    
     if (this.reader) {
-      this.reader.cancel();
-      this.reader.releaseLock();
+      try { this.reader.cancel(); } catch (e) {}
+      try { this.reader.releaseLock(); } catch (e) {}
     }
     if (this.writer) {
-      this.writer.close();
-      this.writer.releaseLock();
+      try { this.writer.close(); } catch (e) {}
+      try { this.writer.releaseLock(); } catch (e) {}
     }
     if (this.port) {
-      this.port.close();
+      try { this.port.close(); } catch (e) {}
     }
-    this._connected = false;
   }
 }
