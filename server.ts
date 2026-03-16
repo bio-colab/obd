@@ -3,8 +3,22 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import { GoogleGenAI, Type } from "@google/genai";
 
-// In-memory store for car data (Feature F & H)
-let carState: Record<string, any> = {
+// Define strict types for CarState
+interface CarState {
+  speed: number;
+  rpm: number;
+  temp: number;
+  voltage: number;
+  throttle: number;
+  map: number;
+  maf: number;
+  fuel_level: number;
+  dtcs: string[];
+  lastUpdated: number | null;
+}
+
+// In-memory store for car data
+let carState: CarState = {
   speed: 0,
   rpm: 0,
   temp: 0,
@@ -17,17 +31,62 @@ let carState: Record<string, any> = {
   lastUpdated: null,
 };
 
+// Simple in-memory rate limiter
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+const RATE_LIMIT_WINDOW = 60000; // 1 minute
+const MAX_REQUESTS = 300; // 300 requests per minute (allows frontend polling + extra)
+
+function rateLimiter(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  
+  let record = rateLimitMap.get(ip);
+  if (!record || now > record.resetTime) {
+    record = { count: 0, resetTime: now + RATE_LIMIT_WINDOW };
+  }
+  
+  record.count++;
+  rateLimitMap.set(ip, record);
+  
+  if (record.count > MAX_REQUESTS) {
+    return res.status(429).json({ error: "Too many requests, please try again later." });
+  }
+  next();
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: '100kb' })); // Limit payload size
+
+  // Apply rate limiter to all API routes
+  app.use("/api", rateLimiter);
 
   // --- REST API (Feature H & F) ---
 
   // Frontend pushes data here (Feature F - IoT Platform)
   app.post("/api/car/update", (req, res) => {
-    carState = { ...carState, ...req.body, lastUpdated: Date.now() };
+    // Basic validation
+    if (!req.body || typeof req.body !== 'object') {
+      return res.status(400).json({ error: "Invalid payload" });
+    }
+
+    // Only allow specific numeric fields to be updated
+    const allowedFields = ['speed', 'rpm', 'temp', 'voltage', 'throttle', 'map', 'maf', 'fuel_level'];
+    const updates: Partial<CarState> = {};
+    
+    for (const field of allowedFields) {
+      if (field in req.body && typeof req.body[field] === 'number') {
+        (updates as any)[field] = req.body[field];
+      }
+    }
+
+    if (Array.isArray(req.body.dtcs)) {
+      updates.dtcs = req.body.dtcs.filter((d: any) => typeof d === 'string');
+    }
+
+    carState = { ...carState, ...updates, lastUpdated: Date.now() };
     res.json({ success: true });
   });
 
@@ -52,6 +111,10 @@ async function startServer() {
   app.post("/api/ai/diagnose", async (req, res) => {
     try {
       const { dtcs, liveData, engineAnalysis } = req.body;
+      
+      if (!dtcs || !Array.isArray(dtcs)) {
+        return res.status(400).json({ error: "Invalid DTCs payload" });
+      }
       
       if (!process.env.GEMINI_API_KEY) {
         return res.status(500).json({ error: "GEMINI_API_KEY is missing" });

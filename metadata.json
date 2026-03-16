@@ -1,5 +1,5 @@
 {
-  "name": "",
-  "description": "",
+  "name": "Super OBD",
+  "description": "Professional OBD-II diagnostic tool with live data, DTC scanning, and AI-powered fault analysis.",
   "requestFramePermissions": []
 }

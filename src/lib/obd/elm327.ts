@@ -39,10 +39,10 @@ export class ELM327 {
     try {
       await this.connection.send(cmd);
       
-      // Add a timeout to the read operation (e.g., 2000ms)
+      // Add a timeout to the read operation (5000ms for slower connections)
       const readPromise = this.connection.read();
       const timeoutPromise = new Promise<string>((_, rej) => 
-        setTimeout(() => rej(new Error('Timeout waiting for ELM327 response')), 2000)
+        setTimeout(() => rej(new Error('Timeout waiting for ELM327 response')), 5000)
       );
       
       const response = await Promise.race([readPromise, timeoutPromise]);
@@ -55,7 +55,7 @@ export class ELM327 {
     }
   }
 
-  parsePIDResponse(hexString: string, pidCode: string): number[] | null {
+  parsePIDResponse(hexString: string, pidCode: string, expectedBytes?: number): number[] | null {
     // Clean string
     const cleanHex = hexString.replace(/\s/g, '').toUpperCase();
     
@@ -70,7 +70,19 @@ export class ELM327 {
     const index = cleanHex.indexOf(expectedPrefix);
     if (index === -1) return null;
 
-    const dataHex = cleanHex.substring(index + expectedPrefix.length);
+    let dataHex = cleanHex.substring(index + expectedPrefix.length);
+    
+    // If expectedBytes is provided, strictly slice the string to avoid junk data
+    if (expectedBytes) {
+      const expectedHexLength = expectedBytes * 2;
+      if (dataHex.length >= expectedHexLength) {
+        dataHex = dataHex.substring(0, expectedHexLength);
+      } else {
+        // Not enough data
+        return null;
+      }
+    }
+
     const bytes = [];
     for (let i = 0; i < dataHex.length; i += 2) {
       bytes.push(parseInt(dataHex.substring(i, i + 2), 16));
@@ -106,24 +118,48 @@ export class ELM327 {
     const index = cleanHex.indexOf('4101');
     if (index === -1) return null;
 
+    // Ensure we have enough bytes (41 01 A B C D)
+    if (cleanHex.length < index + 12) return null;
+
     const b = parseInt(cleanHex.substring(index + 6, index + 8), 16);
     const c = parseInt(cleanHex.substring(index + 8, index + 10), 16);
     const d = parseInt(cleanHex.substring(index + 10, index + 12), 16);
 
-    // Bitwise parsing for common monitors (0 = ready, 1 = not ready)
-    return {
-      misfire: (b & 0x01) === 0,
-      fuelSystem: (b & 0x02) === 0,
-      components: (b & 0x04) === 0,
-      catalyst: (c & 0x01) === 0,
-      heatedCatalyst: (c & 0x02) === 0,
-      evap: (c & 0x04) === 0,
-      secondaryAir: (c & 0x08) === 0,
-      acRefrigerant: (c & 0x10) === 0,
-      o2Sensor: (c & 0x20) === 0,
-      o2Heater: (c & 0x40) === 0,
-      egr: (c & 0x80) === 0,
-    };
+    // Check if Spark or Compression Ignition
+    const isCompression = (b & 0x08) !== 0;
+
+    // Bitwise parsing for common monitors
+    // 0 = ready, 1 = not ready
+    // However, we must also check if the monitor is supported!
+    // If a monitor is not supported, it's technically "ready" (or N/A), but we shouldn't flag it as an error.
+    
+    const readiness: Record<string, boolean> = {};
+
+    // Continuous monitors (always supported)
+    readiness.misfire = (b & 0x10) === 0;
+    readiness.fuelSystem = (b & 0x20) === 0;
+    readiness.components = (b & 0x40) === 0;
+
+    if (!isCompression) {
+      // Spark Ignition
+      readiness.catalyst = (c & 0x01) === 0 ? true : (d & 0x01) === 0;
+      readiness.heatedCatalyst = (c & 0x02) === 0 ? true : (d & 0x02) === 0;
+      readiness.evap = (c & 0x04) === 0 ? true : (d & 0x04) === 0;
+      readiness.secondaryAir = (c & 0x08) === 0 ? true : (d & 0x08) === 0;
+      readiness.acRefrigerant = (c & 0x10) === 0 ? true : (d & 0x10) === 0;
+      readiness.o2Sensor = (c & 0x20) === 0 ? true : (d & 0x20) === 0;
+      readiness.o2Heater = (c & 0x40) === 0 ? true : (d & 0x40) === 0;
+      readiness.egr = (c & 0x80) === 0 ? true : (d & 0x80) === 0;
+    } else {
+      // Compression Ignition (Diesel)
+      readiness.nmhc = (c & 0x01) === 0 ? true : (d & 0x01) === 0;
+      readiness.nox = (c & 0x02) === 0 ? true : (d & 0x02) === 0;
+      readiness.boostPressure = (c & 0x08) === 0 ? true : (d & 0x08) === 0;
+      readiness.egr = (c & 0x20) === 0 ? true : (d & 0x20) === 0;
+      readiness.pmFilter = (c & 0x80) === 0 ? true : (d & 0x80) === 0;
+    }
+
+    return readiness;
   }
 
   disconnect() {

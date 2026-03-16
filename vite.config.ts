@@ -4,11 +4,16 @@ import path from 'path';
 import {defineConfig, loadEnv} from 'vite';
 
 export default defineConfig(({mode}) => {
-  const env = loadEnv(mode, '.', '');
   return {
     plugins: [react(), tailwindcss()],
-    define: {
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            vendor: ['react', 'react-dom', 'react-router-dom', 'lucide-react', 'zustand', 'dexie', 'recharts', 'chart.js', 'react-chartjs-2'],
+          },
+        },
+      },
     },
     resolve: {
       alias: {

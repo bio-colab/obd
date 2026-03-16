@@ -58,28 +58,34 @@ export function analyzeDTCsAndData(dtcs: string[], liveData: Record<string, numb
   }
   
   if (liveData.TEMP !== undefined) {
-    if (liveData.TEMP > 105) {
+    if (liveData.TEMP > 110) { // Increased threshold to 110C for modern engines
       dataAnomalies.push("حرارة المحرك مرتفعة جداً (خطر تلف المحرك)");
       riskLevel = 'CRITICAL';
     }
-    if (liveData.TEMP < 60 && liveData.RUNTIME > 300) {
+    if (liveData.TEMP < 60 && liveData.RUNTIME && liveData.RUNTIME > 300) {
       dataAnomalies.push("حرارة المحرك منخفضة بعد فترة تشغيل (احتمال تلف بلف الحرارة Thermostat)");
     }
   }
 
   if (liveData.BATTERY !== undefined) {
-    if (liveData.BATTERY < 11.5) {
+    // Battery threshold adjusted based on engine state (running vs off)
+    const isRunning = liveData.RPM && liveData.RPM > 400;
+    if (isRunning && liveData.BATTERY < 13.0) {
+      dataAnomalies.push("جهد شحن منخفض أثناء عمل المحرك (احتمال ضعف الدينامو)");
+    } else if (!isRunning && liveData.BATTERY < 11.5) {
       dataAnomalies.push("جهد البطارية منخفض (قد يتسبب في ظهور أعطال وهمية للحساسات)");
     }
-    if (liveData.BATTERY > 15.0) {
+    
+    if (liveData.BATTERY > 15.2) {
       dataAnomalies.push("جهد شحن زائد من الدينامو (خطر على كمبيوتر السيارة)");
       riskLevel = 'CRITICAL';
     }
   }
 
   if (liveData.MAP !== undefined && liveData.RPM !== undefined) {
-    if (liveData.RPM < 1000 && liveData.MAP > 50) {
-      dataAnomalies.push("ضغط المشعب (MAP) مرتفع أثناء الخمول (احتمال تسريب هواء Vacuum Leak)");
+    // MAP threshold is relative to RPM and Load
+    if (liveData.RPM < 1000 && liveData.MAP > 60 && liveData.LOAD && liveData.LOAD < 30) {
+      dataAnomalies.push("ضغط المشعب (MAP) مرتفع أثناء الخمول (احتمال تسريب هواء Vacuum Leak أو مشكلة في التوقيت)");
     }
   }
 

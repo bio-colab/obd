@@ -27,7 +27,7 @@ interface CarState {
   
   // Connection & State
   isConnected: boolean;
-  connectionType: 'usb' | 'ble' | 'wifi' | null;
+  connectionType: 'usb' | 'ble' | 'wifi' | 'demo' | null;
   elm: ELM327 | null;
   sessionId: number | null;
   driverScore: number;
@@ -36,9 +36,12 @@ interface CarState {
   // AI Diagnostics
   aiDiagnosis: AIDiagnosis | null;
   isAnalyzing: boolean;
+
+  // Settings
+  smartAlertsEnabled: boolean;
   
   // Actions
-  connect: (elm: ELM327, type: 'usb' | 'ble' | 'wifi') => Promise<void>;
+  connect: (elm: ELM327, type: 'usb' | 'ble' | 'wifi' | 'demo') => Promise<void>;
   disconnect: () => void;
   startPolling: () => void;
   stopPolling: () => void;
@@ -49,11 +52,14 @@ interface CarState {
   sendRawCommand: (cmd: string) => Promise<string>;
   addTerminalLog: (log: Omit<TerminalLog, 'timestamp'>) => void;
   analyzeFaults: () => Promise<void>;
+  toggleSmartAlerts: () => void;
 }
 
 let pollingInterval: any = null;
 let lastSpeed = 0;
 let lastTime = 0;
+let lastAlerts = { temp: 0, battery: 0 };
+const ALERT_COOLDOWN = 5 * 60 * 1000; // 5 minutes
 
 export const useCarStore = create<CarState>((set, get) => ({
   liveData: {},
@@ -68,6 +74,20 @@ export const useCarStore = create<CarState>((set, get) => ({
   terminalLogs: [],
   aiDiagnosis: null,
   isAnalyzing: false,
+  smartAlertsEnabled: false,
+
+  toggleSmartAlerts: () => {
+    const current = get().smartAlertsEnabled;
+    if (!current && 'Notification' in window) {
+      Notification.requestPermission().then(permission => {
+        if (permission === 'granted') {
+          set({ smartAlertsEnabled: true });
+        }
+      });
+    } else {
+      set({ smartAlertsEnabled: !current });
+    }
+  },
 
   analyzeFaults: async () => {
     const { dtcs, liveData } = get();
@@ -177,12 +197,12 @@ export const useCarStore = create<CarState>((set, get) => ({
   },
 
   startPolling: () => {
-    if (pollingInterval) clearInterval(pollingInterval);
+    if (pollingInterval) clearTimeout(pollingInterval);
     
     // Poll all defined PIDs
     const pidsToPoll = Object.keys(PIDS);
     
-    pollingInterval = setInterval(async () => {
+    const poll = async () => {
       const { elm, sessionId, driverScore, liveData } = get();
       if (!elm || !elm.connection.isConnected) return;
 
@@ -193,7 +213,7 @@ export const useCarStore = create<CarState>((set, get) => ({
         try {
           const pid = PIDS[key];
           const raw = await elm.send(pid.code);
-          const bytes = elm.parsePIDResponse(raw, pid.code);
+          const bytes = elm.parsePIDResponse(raw, pid.code, pid.bytes);
           if (bytes) {
             newLiveData[key] = pid.calc(bytes);
           }
@@ -224,19 +244,26 @@ export const useCarStore = create<CarState>((set, get) => ({
         });
       }
 
-      // Feature G: Driver Behavior Analysis
+      // Feature G: Driver Behavior Analysis (with basic filtering)
       if (newLiveData.SPEED !== undefined) {
         if (lastTime > 0) {
           const deltaV = newLiveData.SPEED - lastSpeed;
           const deltaT = (now - lastTime) / 1000;
-          const accel = deltaV / deltaT;
+          
+          // Only calculate if time delta is reasonable (e.g. > 0.5s to avoid division by near-zero)
+          // and speed delta is not a massive spike (e.g. > 50km/h in 1 sec is likely an error)
+          if (deltaT > 0.5 && Math.abs(deltaV) < 50) {
+            // Convert km/h to m/s for acceleration calculation
+            const accel = (deltaV * (1000 / 3600)) / deltaT;
 
-          if (accel > 6.67) { // Hard acceleration
-            set({ driverScore: Math.max(0, driverScore - 2) });
-            db.events.add({ sessionId: sessionId!, timestamp: now, type: 'hard_accel', value: accel });
-          } else if (accel < -6.67) { // Hard braking
-            set({ driverScore: Math.max(0, driverScore - 2) });
-            db.events.add({ sessionId: sessionId!, timestamp: now, type: 'hard_brake', value: accel });
+            // Thresholds adjusted for more realistic driving (approx 0.4g - 0.5g for hard braking/accel)
+            if (accel > 4.0) { // Hard acceleration
+              set({ driverScore: Math.max(0, driverScore - 1) });
+              db.events.add({ sessionId: sessionId!, timestamp: now, type: 'hard_accel', value: accel });
+            } else if (accel < -4.5) { // Hard braking
+              set({ driverScore: Math.max(0, driverScore - 1) });
+              db.events.add({ sessionId: sessionId!, timestamp: now, type: 'hard_brake', value: accel });
+            }
           }
         }
         lastSpeed = newLiveData.SPEED;
@@ -244,19 +271,29 @@ export const useCarStore = create<CarState>((set, get) => ({
       }
 
       // Feature E: Smart Alerts
-      if (newLiveData.TEMP && newLiveData.TEMP > 105) {
-        new Notification('تنبيه: حرارة المحرك مرتفعة!', { body: `${newLiveData.TEMP}°C` });
-      }
-      if (newLiveData.BATTERY && newLiveData.BATTERY < 11.5) {
-        new Notification('تنبيه: جهد البطارية منخفض!', { body: `${newLiveData.BATTERY}V` });
+      const { smartAlertsEnabled } = get();
+      if (smartAlertsEnabled && typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+        if (newLiveData.TEMP && newLiveData.TEMP > 105 && now - lastAlerts.temp > ALERT_COOLDOWN) {
+          new Notification('تنبيه: حرارة المحرك مرتفعة!', { body: `${newLiveData.TEMP}°C` });
+          lastAlerts.temp = now;
+        }
+        if (newLiveData.BATTERY && newLiveData.BATTERY < 11.5 && now - lastAlerts.battery > ALERT_COOLDOWN) {
+          new Notification('تنبيه: جهد البطارية منخفض!', { body: `${newLiveData.BATTERY}V` });
+          lastAlerts.battery = now;
+        }
       }
 
-    }, 1500); // Poll every 1.5 seconds to avoid overwhelming ELM327 with 20+ PIDs
+      // Schedule next poll
+      pollingInterval = setTimeout(poll, 1500);
+    };
+
+    // Start the first poll
+    pollingInterval = setTimeout(poll, 0);
   },
 
   stopPolling: () => {
     if (pollingInterval) {
-      clearInterval(pollingInterval);
+      clearTimeout(pollingInterval);
       pollingInterval = null;
     }
   },

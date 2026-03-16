@@ -1,25 +1,38 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useCarStore } from '../store/carStore';
 import { USBConnection } from '../lib/obd/usb';
 import { BLEConnection } from '../lib/obd/bluetooth';
 import { WiFiConnection } from '../lib/obd/wifi';
+import { DemoConnection } from '../lib/obd/demo';
 import { ELM327 } from '../lib/obd/elm327';
-import { Usb, Bluetooth, Wifi, LogOut, Loader2 } from 'lucide-react';
+import { Usb, Bluetooth, Wifi, LogOut, Loader2, PlayCircle, Bell } from 'lucide-react';
 
 export function Settings() {
-  const { isConnected, connectionType, connect, disconnect } = useCarStore();
-  const [loading, setLoading] = useState<'usb' | 'ble' | 'wifi' | null>(null);
+  const { isConnected, connectionType, connect, disconnect, smartAlertsEnabled, toggleSmartAlerts } = useCarStore();
+  const [loading, setLoading] = useState<'usb' | 'ble' | 'wifi' | 'demo' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [wifiIp, setWifiIp] = useState('192.168.0.10:35000');
 
-  const handleConnect = async (type: 'usb' | 'ble' | 'wifi') => {
+  const [isSerialSupported, setIsSerialSupported] = useState(true);
+  const [isBluetoothSupported, setIsBluetoothSupported] = useState(true);
+
+  useEffect(() => {
+    setIsSerialSupported('serial' in navigator);
+    setIsBluetoothSupported('bluetooth' in navigator);
+  }, []);
+
+  const handleConnect = async (type: 'usb' | 'ble' | 'wifi' | 'demo') => {
     setLoading(type);
     setError(null);
     try {
       let conn;
       if (type === 'usb') conn = new USBConnection();
       else if (type === 'ble') conn = new BLEConnection();
-      else conn = new WiFiConnection(`ws://${wifiIp}`);
+      else if (type === 'demo') conn = new DemoConnection();
+      else {
+        const cleanIp = wifiIp.replace(/^wss?:\/\//i, '');
+        conn = new WiFiConnection(`ws://${cleanIp}`);
+      }
 
       const elm = new ELM327(conn);
       await connect(elm, type);
@@ -28,6 +41,11 @@ export function Settings() {
     } finally {
       setLoading(null);
     }
+  };
+
+  const handleWifiIpChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setWifiIp(val.replace(/^wss?:\/\//i, ''));
   };
 
   return (
@@ -50,6 +68,7 @@ export function Settings() {
               {connectionType === 'usb' && <Usb className="w-8 h-8 text-emerald-400" />}
               {connectionType === 'ble' && <Bluetooth className="w-8 h-8 text-emerald-400" />}
               {connectionType === 'wifi' && <Wifi className="w-8 h-8 text-emerald-400" />}
+              {connectionType === 'demo' && <PlayCircle className="w-8 h-8 text-emerald-400" />}
             </div>
             <div>
               <h3 className="text-xl font-bold text-emerald-400">متصل بنجاح</h3>
@@ -70,20 +89,22 @@ export function Settings() {
         <div className="grid gap-6">
           <ConnectionCard
             title="اتصال USB"
-            description="يتطلب متصفح Chrome/Edge ودعم Web Serial API"
+            description={isSerialSupported ? "يتطلب متصفح Chrome/Edge ودعم Web Serial API" : "متصفحك لا يدعم Web Serial API"}
             icon={Usb}
             loading={loading === 'usb'}
             onClick={() => handleConnect('usb')}
             color="indigo"
+            disabled={!isSerialSupported}
           />
 
           <ConnectionCard
             title="اتصال Bluetooth BLE"
-            description="يتطلب دعم Web Bluetooth API (أجهزة BLE فقط)"
+            description={isBluetoothSupported ? "يتطلب دعم Web Bluetooth API (أجهزة BLE فقط)" : "متصفحك لا يدعم Web Bluetooth API"}
             icon={Bluetooth}
             loading={loading === 'ble'}
             onClick={() => handleConnect('ble')}
             color="blue"
+            disabled={!isBluetoothSupported}
           />
 
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 hover:border-slate-700 transition-colors">
@@ -99,7 +120,7 @@ export function Settings() {
                   <input
                     type="text"
                     value={wifiIp}
-                    onChange={(e) => setWifiIp(e.target.value)}
+                    onChange={handleWifiIpChange}
                     className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-1 text-sm text-slate-200 focus:outline-none focus:border-teal-500"
                     dir="ltr"
                   />
@@ -114,8 +135,35 @@ export function Settings() {
               {loading === 'wifi' ? <Loader2 className="w-5 h-5 animate-spin" /> : 'اتصال'}
             </button>
           </div>
+
+          <ConnectionCard
+            title="وضع المحاكاة (Demo Mode)"
+            description="تجربة التطبيق ببيانات افتراضية بدون الاتصال بسيارة فعلية"
+            icon={PlayCircle}
+            loading={loading === 'demo'}
+            onClick={() => handleConnect('demo')}
+            color="emerald"
+          />
         </div>
       )}
+
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mt-8">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+              <Bell className="w-5 h-5 text-amber-400" />
+              التنبيهات الذكية
+            </h3>
+            <p className="text-slate-400 mt-1">تلقي إشعارات عند ارتفاع حرارة المحرك أو انخفاض جهد البطارية</p>
+          </div>
+          <button
+            onClick={toggleSmartAlerts}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${smartAlertsEnabled ? 'bg-amber-500' : 'bg-slate-700'}`}
+          >
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${smartAlertsEnabled ? '-translate-x-6' : '-translate-x-1'}`} />
+          </button>
+        </div>
+      </div>
 
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mt-8">
         <h3 className="text-xl font-bold text-slate-100 mb-4">واجهة برمجة التطبيقات (API)</h3>
@@ -132,7 +180,7 @@ export function Settings() {
   );
 }
 
-function ConnectionCard({ title, description, icon: Icon, loading, onClick, color }: { title: string, description: string, icon: any, loading: boolean, onClick: () => void, color: 'indigo' | 'blue' }) {
+function ConnectionCard({ title, description, icon: Icon, loading, onClick, color, disabled = false }: { title: string, description: string, icon: any, loading: boolean, onClick: () => void, color: 'indigo' | 'blue' | 'emerald', disabled?: boolean }) {
   const colorMap = {
     indigo: {
       iconBg: 'bg-indigo-500/10',
@@ -145,6 +193,12 @@ function ConnectionCard({ title, description, icon: Icon, loading, onClick, colo
       iconText: 'text-blue-400',
       border: 'border-blue-500/20 hover:border-blue-500/50',
       btn: 'bg-blue-600 hover:bg-blue-500'
+    },
+    emerald: {
+      iconBg: 'bg-emerald-500/10',
+      iconText: 'text-emerald-400',
+      border: 'border-emerald-500/20 hover:border-emerald-500/50',
+      btn: 'bg-emerald-600 hover:bg-emerald-500'
     }
   };
 
@@ -163,7 +217,7 @@ function ConnectionCard({ title, description, icon: Icon, loading, onClick, colo
       </div>
       <button
         onClick={onClick}
-        disabled={loading}
+        disabled={loading || disabled}
         className={`flex items-center gap-2 px-6 py-3 ${theme.btn} disabled:opacity-50 text-white rounded-xl font-medium transition-colors w-full md:w-auto justify-center`}
       >
         {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'اتصال'}

@@ -74,13 +74,6 @@ function Sidebar() {
 }
 
 export default function App() {
-  useEffect(() => {
-    // Request notification permission for Feature E
-    if ('Notification' in window) {
-      Notification.requestPermission();
-    }
-  }, []);
-
   return (
     <Router>
       <div className="flex h-screen bg-slate-950 text-slate-50 font-sans" dir="rtl">
